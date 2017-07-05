@@ -24,6 +24,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <stdlib.h>
 
 /////////////get class path////////////
 #include <unistd.h>
@@ -33,8 +34,8 @@
 #include "NvInfer.h"
 #include "NvCaffeParser.h"
 
-using namespace nvinfer1;
-using namespace nvcaffeparser1;
+//using namespace nvinfer1;
+//using namespace nvcaffeparser1;
 
 //using namespace cv;
 typedef std::pair<std::string,float> mate;
@@ -56,7 +57,9 @@ typedef std::pair<std::string,float> mate;
 static const int INPUT_H = 192;
 static const int INPUT_W = 192;
 static const int CHANNEL_NUM = 3;
-static const int OUTPUT_SIZE = 1498; //1498
+//static const int OUTPUT_SIZE = 1498; //1498
+int OUTPUT_SIZE = 1498; //1498    ********************Define by yourself*****************
+
 
 const std::string Model_  = "fr_1498.caffemodel";
 const std::string Deploy_ = "deploy.prototxt";
@@ -68,9 +71,14 @@ const std::string Path_   = "./fr_model/";
 const char* INPUT_BLOB_NAME = "data";
 const char* OUTPUT_BLOB_NAME = "softmax";
 //const char* OUTPUT_BLOB_NAME = "fc11_dropout";
+//=================================================
 
+//float prob[OUTPUT_SIZE];
+float *prob=(float*)malloc(OUTPUT_SIZE*sizeof(float));
+
+//================================================
 // Logger for GIE info/warning/errors
-class Logger : public ILogger			
+class Logger : public nvinfer1::ILogger			
 {
 	void log(Severity severity, const char* msg) override
 	{
@@ -97,18 +105,18 @@ void caffeToGIEModel(const std::string& deployFile,				// name for caffe prototx
 					 const std::string& modelFile,				// name for model 
 					 const std::vector<std::string>& outputs,   // network outputs
 					 unsigned int maxBatchSize,					// batch size - NB must be at least as large as the batch we want to run with)
-					 IHostMemory *&gieModelStream)    // output buffer for the GIE model
+					 nvinfer1::IHostMemory *&gieModelStream)    // output buffer for the GIE model
 {
 	// create the builder
-	IBuilder* builder = createInferBuilder(gLogger);
+	nvinfer1::IBuilder* builder = nvinfer1::createInferBuilder(gLogger);
 
 	// parse the caffe model to populate the network, then set the outputs
-	INetworkDefinition* network = builder->createNetwork();
-	ICaffeParser* parser = createCaffeParser();
-	const IBlobNameToTensor* blobNameToTensor = parser->parse(locateFile(deployFile).c_str(),
+	nvinfer1::INetworkDefinition* network = builder->createNetwork();
+	nvcaffeparser1::ICaffeParser* parser = nvcaffeparser1::createCaffeParser();
+	const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor = parser->parse(locateFile(deployFile).c_str(),
 															  locateFile(modelFile).c_str(),
 															  *network,
-															  DataType::kFLOAT);
+															  nvinfer1::DataType::kFLOAT);
 
 	// specify which tensors are outputs
 	for (auto& s : outputs)
@@ -119,7 +127,7 @@ void caffeToGIEModel(const std::string& deployFile,				// name for caffe prototx
 	builder->setMaxWorkspaceSize(1 << 20);
 	//builder->setHalf2Mode(true);
 
-	ICudaEngine* engine = builder->buildCudaEngine(*network);
+	nvinfer1::ICudaEngine* engine = builder->buildCudaEngine(*network);
 	assert(engine);
 
 	// we don't need the network any more, and we can destroy the parser
@@ -131,13 +139,13 @@ void caffeToGIEModel(const std::string& deployFile,				// name for caffe prototx
 	gieModelStream = engine->serialize();
 	engine->destroy();
 	builder->destroy();
-	shutdownProtobufLibrary();
+	nvcaffeparser1::shutdownProtobufLibrary();
 }
 
 
-void doInference(IExecutionContext& context, float* input, float* output, int batchSize)
+void doInference(nvinfer1::IExecutionContext& context, float* input, float* output, int batchSize)
 {
-	const ICudaEngine& engine = context.getEngine();
+	const nvinfer1::ICudaEngine& engine = context.getEngine();
 	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
 	// of these, but in this case we know that there is exactly one input and one output.
 	assert(engine.getNbBindings() == 2);
@@ -225,22 +233,22 @@ int main(int argc, char** argv)
 	
 t1=clock();
 	// create a GIE model from the caffe model and serialize it to a stream
-    	IHostMemory *gieModelStream{nullptr};
+    	nvinfer1::IHostMemory *gieModelStream{nullptr};
 	caffeToGIEModel(Deploy_, Model_, std::vector < std::string > { OUTPUT_BLOB_NAME }, 1, gieModelStream);
 
 t2=clock();
 	// deserialize the engine 
-	IRuntime* runtime = createInferRuntime(gLogger);
-	ICudaEngine* engine = runtime->deserializeCudaEngine(gieModelStream->data(), gieModelStream->size(), nullptr);
+	nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(gLogger);
+	nvinfer1::ICudaEngine* engine = runtime->deserializeCudaEngine(gieModelStream->data(), gieModelStream->size(), nullptr);
    	if (gieModelStream) gieModelStream->destroy();
 
-	IExecutionContext *context = engine->createExecutionContext();
+	nvinfer1::IExecutionContext *context = engine->createExecutionContext();
 	std::cout<<"engine builded!!!!"<< std::endl;
 
 t3=clock();	
 	// parse the mean file 
-	ICaffeParser* parser = createCaffeParser();
-	IBinaryProtoBlob* meanBlob = parser->parseBinaryProto(locateFile(Mean_).c_str());
+	nvcaffeparser1::ICaffeParser* parser = nvcaffeparser1::createCaffeParser();
+	nvcaffeparser1::IBinaryProtoBlob* meanBlob = parser->parseBinaryProto(locateFile(Mean_).c_str());
 	parser->destroy();
 
 	const float *meanData = reinterpret_cast<const float*>(meanBlob->getData());
@@ -250,7 +258,7 @@ t3=clock();
 t4=clock();
 
 	cv::Mat img_input = cv::imread(Path_ + Image_ , 1);
-	float prob[OUTPUT_SIZE];
+	//float prob[OUTPUT_SIZE];
 	if (!img_input.empty())
 	{
 	
@@ -290,7 +298,7 @@ t5=clock();
 	context->destroy();
 	engine->destroy();
 	runtime->destroy();
-
+	free(prob);
 ////============================================================================================
 ////============================================================================================
 ////============================================================================================
