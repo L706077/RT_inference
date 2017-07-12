@@ -2,22 +2,12 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include "opencv2/opencv.hpp"
-#include "opencv2/core/core.hpp"
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-
-#include <assert.h>
-#include <fstream>
-#include <sstream>
-#include <iostream>
 #include <cmath>
 #include <sys/stat.h>
 #include <cmath>
 #include <time.h>
 #include <cuda_runtime_api.h>
+#include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -25,6 +15,9 @@
 #include <string>
 #include <utility>
 #include <stdlib.h>
+#include <stdio.h>
+//#include "opencv2/opencv.hpp"
+//#include "opencv2/core/core.hpp"
 
 /////////////get class path////////////
 #include <unistd.h>
@@ -125,6 +118,7 @@ void caffeToGIEModel(const std::string& deployFile,				// name for caffe prototx
 	// Build the engine
 	builder->setMaxBatchSize(maxBatchSize);
 	builder->setMaxWorkspaceSize(1 << 20);
+
 	//builder->setHalf2Mode(true);
 
 	nvinfer1::ICudaEngine* engine = builder->buildCudaEngine(*network);
@@ -228,8 +222,8 @@ int main(int argc, char** argv)
 {
 	clock_t t1, t2, t3, t4, t5, t6, t7;
 
-//===========================================================================================
-//===========================================================================================
+//==============================================================================================
+//==============================================================================================
 	
 t1=clock();
 	// create a GIE model from the caffe model and serialize it to a stream
@@ -246,16 +240,6 @@ t2=clock();
 	std::cout<<"engine builded!!!!"<< std::endl;
 
 t3=clock();	
-	// parse the mean file 
-	nvcaffeparser1::ICaffeParser* parser = nvcaffeparser1::createCaffeParser();
-	nvcaffeparser1::IBinaryProtoBlob* meanBlob = parser->parseBinaryProto(locateFile(Mean_).c_str());
-	parser->destroy();
-
-	const float *meanData = reinterpret_cast<const float*>(meanBlob->getData());
-	meanBlob->destroy();
-
-
-t4=clock();
 
 	cv::Mat img_input = cv::imread(Path_ + Image_ , 1);
 	//float prob[OUTPUT_SIZE];
@@ -283,6 +267,15 @@ t4=clock();
 				}
 			}
 		}
+//==============================================================================================
+		// parse the mean file 
+		nvcaffeparser1::ICaffeParser* parser = nvcaffeparser1::createCaffeParser();
+		nvcaffeparser1::IBinaryProtoBlob* meanBlob = parser->parseBinaryProto(locateFile(Mean_).c_str());
+		parser->destroy();
+		const float *meanData = reinterpret_cast<const float*>(meanBlob->getData());
+		
+//==============================================================================================
+
 		float data[INPUT_H*INPUT_W*CHANNEL_NUM];
 		for (int i = 0; i < INPUT_H*INPUT_W*CHANNEL_NUM; i++)
 		{	
@@ -290,9 +283,10 @@ t4=clock();
 		}
 			
 		doInference(*context, data, prob, 1);
+		meanBlob->destroy();
 	}
 
-t5=clock();
+t4=clock();
 
 	// destroy the engine
 	context->destroy();
@@ -330,14 +324,13 @@ t5=clock();
 ////============================================================================================
 ////============================================================================================
 
-t6=clock();
+t5=clock();
 
 	std::cout<<"t2-t1 time:"<<(double)(t2-t1)/(CLOCKS_PER_SEC)<<"s"<<" (create GIE model) "<<std::endl;
 	std::cout<<"t3-t2 time:"<<(double)(t3-t2)/(CLOCKS_PER_SEC)<<"s"<<" (build engine "<<std::endl;
-	std::cout<<"t4-t3 time:"<<(double)(t4-t3)/(CLOCKS_PER_SEC)<<"s"<<" (parse mean file) "<<std::endl;
-	std::cout<<"t6-t5 time:"<<(double)(t5-t4)/(CLOCKS_PER_SEC)<<"s"<<" (doInference) "<<std::endl;
-	std::cout<<"t7-t6 time:"<<(double)(t6-t5)/(CLOCKS_PER_SEC)<<"s"<<" (find top 5) "<<std::endl;
-	std::cout<<"t6-t1 time:"<<(double)(t6-t1)/(CLOCKS_PER_SEC)<<"s"<<std::endl;
+	std::cout<<"t4-t3 time:"<<(double)(t4-t3)/(CLOCKS_PER_SEC)<<"s"<<" (doInference) "<<std::endl;
+	std::cout<<"t5-t4 time:"<<(double)(t5-t4)/(CLOCKS_PER_SEC)<<"s"<<" (find top 5) "<<std::endl;
+	std::cout<<"t5-t1 time:"<<(double)(t5-t1)/(CLOCKS_PER_SEC)<<"s"<<" (total time) "<<std::endl;
 	return 0;
 }
 
